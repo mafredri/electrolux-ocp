@@ -63,12 +63,13 @@ func New(config Config) (*Client, error) {
 	return c, nil
 }
 
-func (c *Client) SetAuthToken(token AuthToken) {
-	c.authToken = token
+func (c *Client) SetAuth(regionalBaseURL string, auth AuthToken) {
+	c.regionalBaseURL = regionalBaseURL
+	c.authToken = auth
 }
 
-func (c *Client) GetAuthToken() AuthToken {
-	return c.authToken
+func (c *Client) GetAuth() (regionalBaseURL string, token AuthToken) {
+	return c.regionalBaseURL, c.authToken
 }
 
 // Login logs in to the API using the provided email and password.
@@ -151,12 +152,25 @@ func (c *Client) ClientToken(ctx context.Context) (ClientToken, error) {
 }
 
 func (c *Client) login(ctx context.Context, idToken string) (AuthToken, error) {
-	body, err := json.Marshal(tokenRequest{
+	return c.token(ctx, tokenRequest{
 		GrantType: "urn:ietf:params:oauth:grant-type:token-exchange",
 		ClientID:  c.config.ClientID,
 		IDToken:   idToken,
 		Scope:     "",
 	})
+}
+
+func (c *Client) refresh(ctx context.Context, token AuthToken) (AuthToken, error) {
+	return c.token(ctx, tokenRequest{
+		GrantType:    "refresh_token",
+		ClientID:     c.config.ClientID,
+		RefreshToken: token.RefreshToken,
+		Scope:        "",
+	})
+}
+
+func (c *Client) token(ctx context.Context, payload tokenRequest) (AuthToken, error) {
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return AuthToken{}, fmt.Errorf("marshal: %w", err)
 	}
@@ -228,9 +242,15 @@ func (c *Client) countries(ctx context.Context, token ClientToken) (countries, e
 }
 
 func (c *Client) doAuthorized(req *http.Request) (*http.Response, error) {
+	if c.authToken.AccessToken == "" {
+		return nil, errors.New("please login before using authorized endpoints")
+	}
 	if !c.authToken.ExpiresAt.After(time.Now()) {
-		// TODO(mafredri): Refresh.
-		return nil, errors.New("auth token expired")
+		authToken, err := c.refresh(req.Context(), c.authToken)
+		if err != nil {
+			return nil, errors.New("auth token expired: refresh failed")
+		}
+		c.authToken = authToken
 	}
 
 	req.Header.Add("Authorization", c.authToken.Authorization())

@@ -9,8 +9,9 @@ import (
 type tokenRequest struct {
 	GrantType    string `json:"grantType"`
 	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret,omitempty"` // Set for apiToken.
-	IDToken      string `json:"idToken,omitempty"`      // Set for authToken.
+	ClientSecret string `json:"clientSecret,omitempty"` // Set for ClientToken.
+	IDToken      string `json:"idToken,omitempty"`      // Set for login.
+	RefreshToken string `json:"refreshToken,omitempty"` // Set for refresh.
 	Scope        string `json:"scope"`
 }
 
